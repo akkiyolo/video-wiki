@@ -2,6 +2,9 @@
 
 VideoWiki is a state-of-the-art, high-density video knowledge engine. It automatically transcribes and compiles YouTube videos or local media files into gorgeous, flowing Wikipedia-style editorial articles. Built with a floated InfoBox layout and a collapsing **AI Research Assistant** sidebar, VideoWiki makes video catalogs completely searchable, queryable, and readable in seconds.
 
+<img width="1917" height="968" alt="image" src="https://github.com/user-attachments/assets/58cc4d61-36f1-4edb-942b-07642d2908f5" />
+
+
 ---
 
 ## 🚀 SOTA Tech Stack Architecture
