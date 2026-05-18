@@ -1,0 +1,54 @@
+# ==========================================
+# VideoMind Git Ignore Configuration
+# ==========================================
+
+# Environment variables & API keys
+.env
+.env.*
+*.env
+
+# SQLite Databases & Storage
+instance/
+*.db
+*.sqlite3
+
+# Local Uploads and media caches
+uploads/
+static/uploads/
+
+# Python caching & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.nosenv
+.project
+.pydevproject
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+bin/
+lib/
+include/
+
+# OS specific files
+Thumbs.db
+db.webproj
+*.directory
+.DS_Store
+Desktop.ini
+
+# IDE & Editor configurations
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.swo

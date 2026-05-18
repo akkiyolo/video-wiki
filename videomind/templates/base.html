@@ -1,0 +1,103 @@
+{% from "partials/session_card.html" import render_session %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}VideoWiki — SOTA Video Wikipedia{% endblock %}</title>
+  
+  <!-- Premium Fonts from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+  
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+  {% set active_session_id = session.id if session is defined else None %}
+  
+  <div class="app-container">
+    <!-- Hamburger Button for Mobile -->
+    <button class="mobile-sidebar-toggle" id="sidebarToggle" aria-label="Toggle Sidebar">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="4" y1="12" x2="20" y2="12"></line>
+        <line x1="4" y1="6" x2="20" y2="6"></line>
+        <line x1="4" y1="18" x2="20" y2="18"></line>
+      </svg>
+    </button>
+
+    <!-- Sidebar Layout -->
+    <aside class="app-sidebar" id="appSidebar">
+      <div class="sidebar-header">
+        <a href="{{ url_for('index') }}" class="logo-link">
+          <div class="logo-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
+              <path d="M6 2v18"></path>
+              <path d="m13 8 4 2.5-4 2.5V8Z"></path>
+            </svg>
+          </div>
+          <span class="logo-text">VideoWiki</span>
+        </a>
+        <a href="{{ url_for('index') }}" class="btn-new-video">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="btn-icon">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          New Article
+        </a>
+      </div>
+      
+      <div class="sidebar-body">
+        <span class="sidebar-section-title">RECENT VIDEOS</span>
+        <div class="sidebar-sessions-list" id="sidebarSessionsList">
+          {% if sessions %}
+            {% for s in sessions %}
+              {{ render_session(s, active_session_id) }}
+            {% endfor %}
+          {% else %}
+            <div class="sidebar-empty">
+              <p>No video sessions yet.</p>
+              <p class="empty-sub">Upload a video or YouTube link to get started.</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <!-- Mobile Overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- Mobile Sidebar Toggle Handler -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const toggleBtn = document.getElementById('sidebarToggle');
+      const sidebar = document.getElementById('appSidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+
+      function toggleSidebar() {
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('active');
+        toggleBtn.classList.toggle('active');
+      }
+
+      toggleBtn.addEventListener('click', toggleSidebar);
+      overlay.addEventListener('click', toggleSidebar);
+    });
+  </script>
+
+  <!-- Conditional script loading at bottom -->
+  {% if page == 'upload' %}
+    <script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+  {% elif page == 'chat' %}
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+  {% endif %}
+</body>
+</html>

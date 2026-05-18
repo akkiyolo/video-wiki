@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}VideoWiki — Video Wikipedia Dashboard{% endblock %}
+
+{% block content %}
+<div class="upload-page-wrapper">
+  
+  <!-- SOTA Portal Hero Header -->
+  <div class="wiki-portal-hero">
+    <div class="portal-logo-glow">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
+        <path d="M6 2v18"></path>
+      </svg>
+    </div>
+    <h1 class="portal-main-title">VideoWiki Portal</h1>
+    <p class="portal-subtitle">The SOTA collaborative Video-to-Article Knowledge Engine. Transcribe speech, synthesize editorial articles, and search memory indices.</p>
+  </div>
+
+  <!-- Global Wikipedia Search Section -->
+  <div class="wiki-global-search-card">
+    <div class="wiki-search-header">
+      <h2 class="wiki-search-title">Search Video Wikipedia</h2>
+      <p class="wiki-search-subtitle">Search concepts and chapters across all indexed articles using HydraDB Semantic Indexing</p>
+    </div>
+    <form class="wiki-search-form" id="globalSearchForm">
+      <div class="wiki-search-input-group">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="search-icon">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input 
+          type="text" 
+          id="globalSearchInput" 
+          placeholder="Search across all video articles... (e.g. neural networks, black holes, RAG)" 
+          required 
+          class="form-control"
+        />
+        <button type="submit" class="btn-primary" id="btnGlobalSearch">Search Portal</button>
+      </div>
+    </form>
+
+    <!-- Trending Categories / Quick Clicks -->
+    <div class="trending-topics">
+      <span class="trending-label">Trending Concepts:</span>
+      <button class="trending-tag" data-query="RAG Pipelines">RAG Pipelines</button>
+      <button class="trending-tag" data-query="Neural Networks">Neural Networks</button>
+      <button class="trending-tag" data-query="Rick Astley">Rick Astley</button>
+      <button class="trending-tag" data-query="Artificial Intelligence">AI</button>
+    </div>
+    
+    <!-- Global Search Results Container (Initially Hidden) -->
+    <div class="search-results-container" id="searchResults" style="display: none;">
+      <div class="results-header">
+        <h3>Article Search Results</h3>
+        <button class="btn-clear-results" id="btnClearResults">Clear</button>
+      </div>
+      <div class="results-list" id="resultsList">
+        <!-- Dynamically populated via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Ingest Configuration Panel -->
+  <div class="upload-container" id="uploadContainer">
+    
+    <!-- Symmetrical Dual Ingest Cards -->
+    <div class="ingest-portal-grid" id="uploadOptionsCard">
+      
+      <!-- Card 1: YouTube Ingest Portal -->
+      <div class="ingest-card">
+        <div class="ingest-card-header">
+          <div class="ingest-icon-wrapper youtube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path>
+              <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon>
+            </svg>
+          </div>
+          <h3>Index YouTube Video</h3>
+          <p>Compile any public YouTube video or short into a VideoWiki article in seconds.</p>
+        </div>
+        
+        <form class="youtube-ingest-form" id="youtubeForm">
+          <div class="form-group" style="width: 100%;">
+            <label for="youtubeUrl" class="form-label-portal">YouTube Link</label>
+            <div class="input-wrapper">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="input-icon">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+              <input 
+                type="url" 
+                id="youtubeUrl" 
+                placeholder="https://www.youtube.com/watch?v=..." 
+                required 
+                class="form-control"
+              />
+            </div>
+          </div>
+          <button type="submit" class="btn-primary-portal" id="btnYoutubeSubmit" style="margin-top: 12px;">Compile Video</button>
+        </form>
+      </div>
+
+      <!-- Card 2: Local File Ingest Portal -->
+      <div class="ingest-card">
+        <div class="ingest-card-header">
+          <div class="ingest-icon-wrapper file">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </div>
+          <h3>Upload Local Media</h3>
+          <p>Ingest MP4 video or MP3/WAV/M4A audio directly from your local filesystem.</p>
+        </div>
+        
+        <div class="file-ingest-container">
+          <div class="drop-zone" id="dropZone" style="padding: 20px;">
+            <div class="drop-zone-content">
+              <div class="drop-zone-icon" style="margin-bottom: 8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 24px; height: 24px;">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+              </div>
+              <p class="drop-zone-text" style="font-size: 13px;">Drag & drop file here, or <span class="browse-link" style="font-weight: 700;">browse</span></p>
+              <p class="drop-zone-sub" style="font-size: 11px; margin-top: 4px;">Supports MP4, MP3, WAV up to 500MB</p>
+            </div>
+            <input type="file" id="fileInput" accept="video/*,audio/*" style="display: none;" />
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Active Process Progress Card (Initially Hidden) -->
+    <div class="upload-card progress-card" id="progressCard" style="display: none;">
+      <div class="upload-card-header">
+        <h1 class="upload-title" id="progressMainTitle">Compiling Video Article...</h1>
+        <p class="upload-subtitle">Hang tight, we are transcribing speech, training memory layers, and editing the Wiki article</p>
+      </div>
+
+      <div class="progress-steps-list">
+        <!-- Step 1: Transcribing -->
+        <div class="progress-step pending" id="step-transcribe">
+          <div class="step-indicator">
+            <span class="step-number">1</span>
+            <span class="step-spinner"></span>
+            <span class="step-check">✓</span>
+          </div>
+          <div class="step-details">
+            <h4 class="step-title">Transcribing Audio</h4>
+            <p class="step-desc" id="desc-transcribe">Waiting to start transcription...</p>
+          </div>
+        </div>
+
+        <!-- Step 2: HydraDB Sync -->
+        <div class="progress-step pending" id="step-hydra">
+          <div class="step-indicator">
+            <span class="step-number">2</span>
+            <span class="step-spinner"></span>
+            <span class="step-check">✓</span>
+          </div>
+          <div class="step-details">
+            <h4 class="step-title">Storing in HydraDB</h4>
+            <p class="step-desc" id="desc-hydra">Injecting memories into HydraDB tenant context...</p>
+          </div>
+        </div>
+
+        <!-- Step 3: Wikipedia Synthesis -->
+        <div class="progress-step pending" id="step-article">
+          <div class="step-indicator">
+            <span class="step-number">3</span>
+            <span class="step-spinner"></span>
+            <span class="step-check">✓</span>
+          </div>
+          <div class="step-details">
+            <h4 class="step-title">Synthesizing Wiki Article</h4>
+            <p class="step-desc" id="desc-article">Waiting for memories to index...</p>
+          </div>
+        </div>
+
+        <!-- Step 4: Session Ready -->
+        <div class="progress-step pending" id="step-ready">
+          <div class="step-indicator">
+            <span class="step-number">4</span>
+            <span class="step-spinner"></span>
+            <span class="step-check">✓</span>
+          </div>
+          <div class="step-details">
+            <h4 class="step-title">Ready for Reader</h4>
+            <p class="step-desc" id="desc-ready">Almost there, finalizing metadata box...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Processing Error Container (Initially Hidden) -->
+      <div class="progress-error-container" id="progressErrorContainer" style="display: none;">
+        <div class="error-banner">
+          <div class="error-banner-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <div class="error-banner-content">
+            <h4>Ingestion Failed</h4>
+            <p id="progressErrorMessage">An error occurred during transcription. Please try again.</p>
+          </div>
+        </div>
+        <button class="btn-primary" id="btnRestart">Go Back</button>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% macro render_session(session, active_id) %}
+<a href="{{ url_for('session_detail', id=session.id) }}" class="session-card {% if session.id == active_id %}active{% endif %}" id="session-card-{{ session.id }}">
+  <div class="session-card-thumbnail-container">
+    {% if session.source_type == 'youtube' and session.thumbnail %}
+      <img src="{{ session.thumbnail }}" alt="YouTube Thumbnail" class="session-card-thumbnail" loading="lazy" />
+    {% else %}
+      <div class="session-card-file-icon">
+        <!-- Modern Premium File/Video SVG Icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </div>
+    {% endif %}
+  </div>
+  <div class="session-card-details">
+    <h4 class="session-card-title" title="{{ session.title }}">{{ session.title }}</h4>
+    <div class="session-card-metadata">
+      <span class="status-pill {{ session.status }}">
+        {{ session.status | capitalize }}
+      </span>
+      {% if session.status == 'ready' %}
+        <span class="session-card-words">{{ session.word_count }} words</span>
+      {% endif %}
+    </div>
+  </div>
+</a>
+{% endmacro %}
