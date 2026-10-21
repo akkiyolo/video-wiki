@@ -2,6 +2,8 @@ import os
 import re
 import threading
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import IpBlocked, RequestBlocked, TranscriptsDisabled, VideoUnavailable
+from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
 from config import Config
 
 # Whisper model is expensive to load, so it is created once and shared.
@@ -12,6 +14,21 @@ _whisper_lock = threading.Lock()
 class TranscriptionError(Exception):
     """Custom exception raised when transcription fails."""
     pass
+
+def _get_proxy_config():
+    """
+    YouTube blocks caption requests from most cloud-provider IPs, so deployments
+    can route them through a proxy. Webshare rotating residential proxies are
+    preferred; any HTTP(S) proxy URL works as a fallback.
+    """
+    if Config.WEBSHARE_PROXY_USERNAME and Config.WEBSHARE_PROXY_PASSWORD:
+        return WebshareProxyConfig(
+            proxy_username=Config.WEBSHARE_PROXY_USERNAME,
+            proxy_password=Config.WEBSHARE_PROXY_PASSWORD,
+        )
+    if Config.YOUTUBE_PROXY_URL:
+        return GenericProxyConfig(http_url=Config.YOUTUBE_PROXY_URL, https_url=Config.YOUTUBE_PROXY_URL)
+    return None
 
 def extract_youtube_id(url: str) -> str | None:
     """
@@ -61,7 +78,7 @@ def transcribe_youtube(url: str) -> str:
     
     try:
         # Fetch the transcript list from the YouTube Transcript API
-        api = YouTubeTranscriptApi()
+        api = YouTubeTranscriptApi(proxy_config=_get_proxy_config())
         transcript_list = api.list(video_id)
         
         # Try English first, then fallback to first available
@@ -85,6 +102,20 @@ def transcribe_youtube(url: str) -> str:
         
     except TranscriptionError:
         raise
+    except (RequestBlocked, IpBlocked):
+        hint = (
+            "the configured proxy was blocked too; try another proxy"
+            if _get_proxy_config()
+            else "set WEBSHARE_PROXY_USERNAME/WEBSHARE_PROXY_PASSWORD or YOUTUBE_PROXY_URL to route caption requests through a proxy"
+        )
+        raise TranscriptionError(
+            "YouTube is blocking caption requests from this server's IP (common on cloud hosts). "
+            f"To fix this, {hint}. Uploading the video file directly also works."
+        )
+    except TranscriptsDisabled:
+        raise TranscriptionError("This video has no captions available. Download it and upload the file instead.")
+    except VideoUnavailable:
+        raise TranscriptionError("This video is unavailable (private, deleted, or region-locked).")
     except Exception as e:
         raise TranscriptionError(f"Failed to fetch YouTube captions: {str(e)}")
 

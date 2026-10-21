@@ -36,6 +36,11 @@ class Config:
     MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
     HYDRADB_API_KEY = os.getenv("HYDRADB_API_KEY", "")
 
+    # Optional proxy for YouTube caption requests (cloud IPs are usually blocked by YouTube)
+    WEBSHARE_PROXY_USERNAME = os.getenv("WEBSHARE_PROXY_USERNAME", "")
+    WEBSHARE_PROXY_PASSWORD = os.getenv("WEBSHARE_PROXY_PASSWORD", "")
+    YOUTUBE_PROXY_URL = os.getenv("YOUTUBE_PROXY_URL", "")  # e.g. http://user:pass@host:port
+
     # Models
     MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
     WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
