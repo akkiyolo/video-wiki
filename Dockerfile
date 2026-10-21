@@ -9,7 +9,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     WHISPER_MODEL=base \
     DATA_DIR=/data \
     DATABASE_URL=sqlite:////data/videomind.db \
-    UPLOAD_FOLDER=/data/uploads \
     HOST=0.0.0.0 \
     PORT=8000
 

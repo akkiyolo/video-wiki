@@ -48,6 +48,10 @@ class Config:
         os.getenv("DATABASE_URL", "sqlite:///videomind.db"), DATA_DIR
     )
 
-    # Upload settings
-    UPLOAD_FOLDER = str(_resolve_dir(os.getenv("UPLOAD_FOLDER", ""), BASE_DIR / "uploads"))
+    # Upload settings (temporary files; relative paths live inside DATA_DIR so they
+    # always land somewhere writable, e.g. the /data volume in Docker)
+    _upload_folder = os.getenv("UPLOAD_FOLDER", "uploads")
+    UPLOAD_FOLDER = str(
+        Path(_upload_folder) if Path(_upload_folder).is_absolute() else DATA_DIR / _upload_folder
+    )
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 524288000))  # Default 500MB

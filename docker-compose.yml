@@ -11,7 +11,6 @@ services:
       # Container paths override any local values from videomind/.env
       DATA_DIR: /data
       DATABASE_URL: sqlite:////data/videomind.db
-      UPLOAD_FOLDER: /data/uploads
     volumes:
       - videomind-data:/data
     restart: unless-stopped
