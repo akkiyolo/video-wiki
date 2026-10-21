@@ -8,14 +8,14 @@ VideoMind is a premium, high-density AI Video Agent platform that lets you inges
 
 ```mermaid
 graph TD
-    User([User Browser]) -->|Upload Media / Submit URL| Flask[Flask Backend Core]
-    Flask -->|Run daemon thread| Worker[Background Worker Task]
+    User([User Browser]) -->|Upload Media / Submit URL| API[FastAPI Backend Core]
+    API -->|Run daemon thread| Worker[Background Worker Task]
     Worker -->|Extract captions| YT[youtube-transcript-api]
     Worker -->|quantized CPU transcription| Whisper[faster-whisper base]
     Worker -->|Create isolation index & upload| HydraDB[(HydraDB Vector Memory)]
-    User -->|Stream chat message| Flask
-    Flask -->|Recall semantic context| HydraDB
-    Flask -->|Augment query + stream chat| Mistral[Mistral Large SDK]
+    User -->|Stream chat message| API
+    API -->|Recall semantic context| HydraDB
+    API -->|Augment query + stream chat| Mistral[Mistral Large SDK]
     Mistral -->|Token-by-token SSE stream| User
 ```
 
@@ -24,33 +24,39 @@ graph TD
 ## ⚡ Setup & Installation
 
 ### 1. Pre-requisites
-Make sure you have **Python 3.9+** and `pip` installed on your system.
+Make sure you have **Python 3.10+** (3.11 recommended) and `pip` installed, or just **Docker**.
 
-### 2. Install Dependencies
-Navigate to the root directory and install the pinned packages:
+### 2. Environment Variables Config
+Copy `videomind/.env.example` to `videomind/.env` and fill in your keys:
+```ini
+MISTRAL_API_KEY=your_mistral_api_key
+HYDRADB_API_KEY=your_hydradb_api_key   # optional, enables semantic memory + global search
+DATABASE_URL=sqlite:///videomind.db    # relative SQLite paths live in videomind/instance/
+```
+
+### 3a. Run with Docker (recommended for deployment)
+From the repository root:
 ```bash
+docker compose up --build
+# or, without compose:
+docker build -t videomind .
+docker run -p 8000:8000 --env-file videomind/.env -v videomind-data:/data videomind
+```
+The image bakes in the `faster-whisper` "base" model (skip with `--build-arg PRELOAD_WHISPER=false`), stores the SQLite DB and temporary uploads in the `/data` volume, honours the `PORT` env var used by most PaaS hosts, and exposes a `/healthz` health check.
+
+### 3b. Run locally
+```bash
+cd videomind
 pip install -r requirements.txt
+uvicorn app:app --reload        # or: python app.py
 ```
 > [!NOTE]
 > The first time you upload a local audio or video file, the system will trigger a one-time automatic download of the standard `faster-whisper` "base" model (~150MB).
 
-### 3. Environment Variables Config
-Copy `.env.example` to `.env` and fill in your keys:
-```ini
-MISTRAL_API_KEY=your_mistral_api_key
-HYDRADB_API_KEY=your_hydradb_api_key
-FLASK_SECRET_KEY=generate_random_key_here
-FLASK_ENV=development
-DATABASE_URL=sqlite:///videomind.db
-```
-*(Your workspace has a pre-populated `.env` ready to run!)*
+Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)** in your browser. Interactive API docs are at `/docs`.
 
-### 4. Boot Up the Server
-Start the Flask development environment:
-```bash
-python app.py
-```
-Open **[http://127.0.0.1:5000](http://127.0.0.1:5000)** in your browser.
+> [!IMPORTANT]
+> Run a **single worker process** (the default above). Ingestion progress is tracked in process memory, so multiple workers would break the live progress stream.
 
 ---
 

@@ -1,0 +1,24 @@
+# Never ship secrets or local state into the image
+**/.env
+**/.env.*
+!**/.env.example
+**/instance/
+**/uploads/
+**/*.db
+**/*.sqlite3
+
+# Local tooling
+.git/
+.venv/
+**/venv/
+**/__pycache__/
+**/*.py[cod]
+.vscode/
+.idea/
+.claude/
+
+# Not needed at runtime
+**/*.md
+Dockerfile
+docker-compose.yml
+.dockerignore

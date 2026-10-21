@@ -2,31 +2,52 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load env variables from .env if present
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent
+
+# Load env variables from videomind/.env if present (regardless of the working directory).
+# Real environment variables (e.g. from Docker) take precedence over the file.
+load_dotenv(BASE_DIR / ".env")
+
+
+def _resolve_dir(value: str, default: Path) -> Path:
+    """Resolves a possibly-relative directory against BASE_DIR."""
+    if not value:
+        return default
+    path = Path(value)
+    return path if path.is_absolute() else BASE_DIR / path
+
+
+def _resolve_database_url(url: str, data_dir: Path) -> str:
+    """
+    Resolves relative SQLite paths (e.g. sqlite:///videomind.db) into DATA_DIR so the
+    database location does not depend on the current working directory.
+    This matches the old Flask-SQLAlchemy behaviour, which stored it in instance/.
+    """
+    prefix = "sqlite:///"
+    if url.startswith(prefix):
+        db_path = url[len(prefix):]
+        if db_path and db_path != ":memory:" and not Path(db_path).is_absolute() and not db_path.startswith("/"):
+            return f"{prefix}{(data_dir / db_path).as_posix()}"
+    return url
+
 
 class Config:
     # Keys
     MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
     HYDRADB_API_KEY = os.getenv("HYDRADB_API_KEY", "")
-    
-    # Flask settings
-    SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "videomind-secret-key-default-109823")
-    FLASK_ENV = os.getenv("FLASK_ENV", "development")
-    DEBUG = FLASK_ENV == "development"
-    
+
+    # Models
+    MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
+    WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
+
+    # Persistent data directory (SQLite database lives here by default)
+    DATA_DIR = _resolve_dir(os.getenv("DATA_DIR", ""), BASE_DIR / "instance")
+
     # DB settings
-    # Default to sqlite:///videomind.db inside the videomind directory if not specified
-    DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'videomind.db'}")
-    SQLALCHEMY_DATABASE_URI = DATABASE_URL
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-    
+    DATABASE_URL = _resolve_database_url(
+        os.getenv("DATABASE_URL", "sqlite:///videomind.db"), DATA_DIR
+    )
+
     # Upload settings
-    UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "uploads")
-    # Resolve relative uploads folder to base directory
-    if not os.path.isabs(UPLOAD_FOLDER):
-        UPLOAD_FOLDER = str(BASE_DIR / UPLOAD_FOLDER)
-    
-    MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 524288000)) # Default 500MB
+    UPLOAD_FOLDER = str(_resolve_dir(os.getenv("UPLOAD_FOLDER", ""), BASE_DIR / "uploads"))
+    MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 524288000))  # Default 500MB

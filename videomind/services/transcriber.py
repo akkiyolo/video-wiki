@@ -1,6 +1,13 @@
 import os
 import re
+import threading
 from youtube_transcript_api import YouTubeTranscriptApi
+from config import Config
+
+# Whisper model is expensive to load, so it is created once and shared.
+# Transcription runs are serialized because the model is CPU-bound anyway.
+_whisper_model = None
+_whisper_lock = threading.Lock()
 
 class TranscriptionError(Exception):
     """Custom exception raised when transcription fails."""
@@ -72,32 +79,40 @@ def transcribe_youtube(url: str) -> str:
         transcript_text = " ".join([segment.text.replace('\n', ' ').strip() for segment in segments])
         # Remove extra spaces
         transcript_text = re.sub(r'\s+', ' ', transcript_text).strip()
+        if not transcript_text:
+            raise TranscriptionError("YouTube returned an empty transcript.")
         return transcript_text
         
+    except TranscriptionError:
+        raise
     except Exception as e:
         raise TranscriptionError(f"Failed to fetch YouTube captions: {str(e)}")
 
+def _get_whisper_model():
+    global _whisper_model
+    if _whisper_model is None:
+        # Import faster_whisper only when needed
+        from faster_whisper import WhisperModel
+
+        # cpu/int8 is efficient and supported on standard hardware
+        _whisper_model = WhisperModel(Config.WHISPER_MODEL, device="cpu", compute_type="int8")
+    return _whisper_model
+
 def transcribe_file(filepath: str) -> str:
     """
-    Transcribes a local audio/video file using faster_whisper base model on CPU.
+    Transcribes a local audio/video file using faster_whisper on CPU.
     Deletes the temporary file after transcription completes or fails.
     """
     try:
         if not os.path.exists(filepath):
             raise TranscriptionError(f"Target file does not exist: {filepath}")
             
-        # Import faster_whisper only when needed
-        from faster_whisper import WhisperModel
-        
-        # Initialize whisper model ("base", device="cpu", compute_type="int8" as specified)
-        # Note: cpu/int8 is efficient and supported on standard hardware
-        model = WhisperModel("base", device="cpu", compute_type="int8")
-        
-        segments, info = model.transcribe(filepath, beam_size=5)
-        
-        text_segments = []
-        for segment in segments:
-            text_segments.append(segment.text)
+        with _whisper_lock:
+            model = _get_whisper_model()
+            segments, info = model.transcribe(filepath, beam_size=5)
+
+            # segments is a lazy generator; decoding happens while iterating
+            text_segments = [segment.text for segment in segments if segment.text.strip()]
             
         if not text_segments:
             raise TranscriptionError("Transcription returned empty results.")
@@ -107,6 +122,8 @@ def transcribe_file(filepath: str) -> str:
         transcript = re.sub(r'\s+', ' ', transcript)
         return transcript
         
+    except TranscriptionError:
+        raise
     except Exception as e:
         raise TranscriptionError(f"Whisper transcription failed: {str(e)}")
     finally:
