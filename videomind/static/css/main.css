@@ -1599,6 +1599,29 @@ img {
   color: var(--text-3);
 }
 
+.wiki-empty-state .loading-spinner {
+  width: 26px;
+  height: 26px;
+  margin-bottom: 10px;
+}
+
+.wiki-empty-state p {
+  max-width: 420px;
+}
+
+.wiki-empty-error {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  background: var(--error-soft);
+  font-size: 13px;
+  color: #fecaca;
+}
+
+.wiki-empty-state .btn-primary {
+  margin-top: 10px;
+}
+
 .wiki-empty-state h4 {
   font-family: var(--font-display);
   font-size: 26px;

@@ -97,21 +97,37 @@ document.addEventListener('DOMContentLoaded', () => {
   // CLIENT-SIDE MARKDOWN COMPILER
   // ==========================================
   
-  function renderMarkdown(md) {
-    if (!md || md.trim() === '') {
+  // Placeholder shown while the article is missing: generating / failed / unavailable
+  function renderArticleState(state) {
+    const icon = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
+        <path d="M6 2v18"></path>
+      </svg>`;
+
+    if (state.status === 'failed') {
       return `
         <div class="wiki-empty-state">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
-            <path d="M6 2v18"></path>
-          </svg>
-          <h4>No Wiki article generated yet</h4>
-          <p>The AI synthesis job is still running. Refresh this page in a moment.</p>
-        </div>
-      `;
+          ${icon}
+          <h4>Article generation failed</h4>
+          <p class="wiki-empty-error">${escapeHTML(state.error || 'Unknown error')}</p>
+          <button class="btn-primary" id="btnRetryArticle">Retry generation</button>
+        </div>`;
     }
-
-    return markdownToHTML(md, true);
+    if (state.status === 'unavailable') {
+      return `
+        <div class="wiki-empty-state">
+          ${icon}
+          <h4>No article available</h4>
+          <p>This session has no transcript to build an article from.</p>
+        </div>`;
+    }
+    return `
+      <div class="wiki-empty-state">
+        <span class="loading-spinner"></span>
+        <h4>Writing the article…</h4>
+        <p>Mistral is synthesizing this article. It appears here automatically when ready.</p>
+      </div>`;
   }
 
   // Inline markdown on already-escaped text: code, bold, italics, links
@@ -210,9 +226,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const wikiArticleHtml = document.getElementById('wikiArticleHtml');
   const wikiLoading = document.getElementById('wikiLoading');
 
-  if (rawArticleMarkdown && wikiArticleHtml) {
-    const rawMD = rawArticleMarkdown.value;
-    wikiArticleHtml.innerHTML = renderMarkdown(rawMD);
+  function showArticle(md) {
+    rawArticleMarkdown.value = md;
+    wikiArticleHtml.innerHTML = markdownToHTML(md, true);
     rebuildTOC(wikiArticleHtml);
 
     // Let the article title span the full column above the floated infobox
@@ -220,6 +236,52 @@ document.addEventListener('DOMContentLoaded', () => {
     const infobox = document.querySelector('.wiki-infobox-floated');
     if (titleEl && titleEl.tagName === 'H1' && infobox) {
       infobox.parentNode.insertBefore(titleEl, infobox);
+    }
+  }
+
+  // While the article is missing, poll its status until it is ready or fails
+  let articlePollTimer = null;
+
+  function applyArticleState(state) {
+    clearTimeout(articlePollTimer);
+    if (state.status === 'ready' && state.article_content) {
+      showArticle(state.article_content);
+      return;
+    }
+    wikiArticleHtml.innerHTML = renderArticleState(state);
+    if (state.status === 'generating') {
+      articlePollTimer = setTimeout(pollArticle, 4000);
+    }
+    const btnRetry = document.getElementById('btnRetryArticle');
+    if (btnRetry) {
+      btnRetry.addEventListener('click', () => requestArticle('POST'));
+    }
+  }
+
+  async function requestArticle(method) {
+    try {
+      const response = await fetch(`/api/session/${encodeURIComponent(sessionId)}/article`, { method });
+      const state = await response.json();
+      if (!response.ok) throw new Error(state.error || 'Failed to load article status');
+      applyArticleState(state);
+    } catch (err) {
+      // Network hiccup: keep polling quietly
+      console.error('Article status error:', err);
+      articlePollTimer = setTimeout(pollArticle, 8000);
+    }
+  }
+
+  function pollArticle() {
+    requestArticle('GET');
+  }
+
+  if (rawArticleMarkdown && wikiArticleHtml) {
+    const rawMD = rawArticleMarkdown.value;
+    if (rawMD.trim()) {
+      showArticle(rawMD);
+    } else {
+      wikiArticleHtml.innerHTML = renderArticleState({ status: 'generating' });
+      pollArticle();
     }
     if (wikiLoading) {
       wikiLoading.style.display = 'none';

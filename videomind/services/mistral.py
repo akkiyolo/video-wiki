@@ -2,13 +2,21 @@ from typing import Generator
 try:
     # mistralai >= 2.0
     from mistralai.client import Mistral
+    from mistralai.client.utils import BackoffStrategy, RetryConfig
 except ImportError:
     # mistralai 1.x
     from mistralai import Mistral
+    from mistralai.utils import BackoffStrategy, RetryConfig
 from config import Config
 
 # Hard timeout for Mistral HTTP calls (article synthesis on long transcripts can be slow)
 REQUEST_TIMEOUT_MS = 120_000
+
+# How long to keep retrying rate-limited (429) / 5xx responses with exponential backoff.
+# The free Mistral tier allows very few requests per minute, so article synthesis waits
+# patiently in the background while interactive chat gives up sooner.
+ARTICLE_RETRY_MS = 180_000
+CHAT_RETRY_MS = 20_000
 
 
 class MistralServiceError(Exception):
@@ -16,10 +24,24 @@ class MistralServiceError(Exception):
     pass
 
 
-def _get_client() -> Mistral:
+def _get_client(max_retry_ms: int) -> Mistral:
     if not Config.MISTRAL_API_KEY:
         raise MistralServiceError("MISTRAL_API_KEY is not set. Please configure it in the env.")
-    return Mistral(api_key=Config.MISTRAL_API_KEY, timeout_ms=REQUEST_TIMEOUT_MS)
+    retry_config = RetryConfig(
+        "backoff",
+        BackoffStrategy(initial_interval=2_000, max_interval=30_000, exponent=2, max_elapsed_time=max_retry_ms),
+        retry_connection_errors=True,
+    )
+    return Mistral(api_key=Config.MISTRAL_API_KEY, timeout_ms=REQUEST_TIMEOUT_MS, retry_config=retry_config)
+
+
+def _describe_error(e: Exception) -> str:
+    text = str(e)
+    if "429" in text or "rate limit" in text.lower():
+        return "Mistral rate limit reached (the free tier allows only a few requests per minute). Wait a minute and try again."
+    if "401" in text:
+        return "Mistral rejected the API key. Check MISTRAL_API_KEY."
+    return text
 
 
 def _content_to_text(content) -> str:
@@ -45,7 +67,7 @@ def stream_chat(query: str, context: str, history: list) -> Generator[str, None,
     Builds system prompt, sets up message history, calls Mistral API,
     and yields streamed text tokens. Raises MistralServiceError on failure.
     """
-    client = _get_client()
+    client = _get_client(CHAT_RETRY_MS)
 
     # Build system prompt with injected context
     system_prompt = (
@@ -107,7 +129,7 @@ def stream_chat(query: str, context: str, history: list) -> Generator[str, None,
 
     except Exception as e:
         print(f"Mistral streaming exception: {e}")
-        raise MistralServiceError(f"Mistral stream error: {e}") from e
+        raise MistralServiceError(_describe_error(e)) from e
 
 
 def generate_wikipedia_article(transcript: str, title: str) -> str:
@@ -119,7 +141,7 @@ def generate_wikipedia_article(transcript: str, title: str) -> str:
     if not transcript or not transcript.strip():
         raise MistralServiceError("Transcript is empty; cannot generate an article.")
 
-    client = _get_client()
+    client = _get_client(ARTICLE_RETRY_MS)
 
     system_prompt = (
         "You are an expert technical writer and senior editor for VideoWiki, a highly detailed video encyclopedia.\n"
@@ -149,7 +171,7 @@ def generate_wikipedia_article(transcript: str, title: str) -> str:
         )
     except Exception as e:
         print(f"Mistral article generation exception: {e}")
-        raise MistralServiceError(f"Failed to generate article: {e}") from e
+        raise MistralServiceError(_describe_error(e)) from e
 
     content = None
     if response is not None and getattr(response, 'choices', None):

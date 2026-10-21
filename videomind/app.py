@@ -35,6 +35,8 @@ status_queues: dict[str, queue.Queue] = {}
 # Sessions whose missing article is currently being regenerated in the background
 _article_jobs: set[str] = set()
 _article_jobs_lock = threading.Lock()
+# Last article-generation error per session (in memory; cleared on success or retry)
+_article_errors: dict[str, str] = {}
 
 
 @asynccontextmanager
@@ -202,10 +204,12 @@ def process_session(session_id, source_type, source_data):
         emit("article", "active", "Synthesizing full Wikipedia-style article using Mistral...")
         try:
             session.article_content = mistral.generate_wikipedia_article(transcript, session.title)
+            _article_errors.pop(session_id, None)
             article_msg = "Wikipedia article successfully generated!"
         except Exception as article_err:
             print(f"Failed to generate article: {article_err}")
-            article_msg = "Stored raw transcript only (Article generation failed)"
+            _article_errors[session_id] = str(article_err)
+            article_msg = "Stored transcript only (article generation failed, you can retry from the article page)"
 
         session.status = "ready"
         db.commit()
@@ -242,11 +246,41 @@ def regenerate_article(session_id):
                 return
             session.article_content = mistral.generate_wikipedia_article(session.transcript or "", session.title)
             db.commit()
+        _article_errors.pop(session_id, None)
     except Exception as article_err:
         print(f"Failsafe article generation failed for session {session_id}: {article_err}")
+        _article_errors[session_id] = str(article_err)
     finally:
         with _article_jobs_lock:
             _article_jobs.discard(session_id)
+
+
+def start_article_job(session_id, retry=False) -> bool:
+    """
+    Starts background article generation unless one is already running.
+    A previously failed session is only retried when explicitly asked, so page
+    refreshes don't keep hammering a rate-limited API.
+    """
+    with _article_jobs_lock:
+        if session_id in _article_jobs:
+            return True
+        if session_id in _article_errors and not retry:
+            return False
+        _article_errors.pop(session_id, None)
+        _article_jobs.add(session_id)
+    start_background(regenerate_article, session_id)
+    return True
+
+
+def article_state(session):
+    """Article status for the page: ready / generating / failed / unavailable."""
+    if (session.article_content or "").strip():
+        return {"status": "ready", "article_content": session.article_content}
+    if session.id in _article_jobs:
+        return {"status": "generating"}
+    if session.id in _article_errors:
+        return {"status": "failed", "error": _article_errors[session.id]}
+    return {"status": "unavailable" if not session.transcript else "generating"}
 
 
 def list_sessions(db):
@@ -288,11 +322,7 @@ def session_detail(request: Request, id: str):
     # Failsafe: if status is ready but article_content is empty, regenerate it in the
     # background instead of blocking this page on a slow LLM call
     if session.status == "ready" and not (session.article_content or "").strip() and session.transcript:
-        with _article_jobs_lock:
-            should_start = id not in _article_jobs
-            _article_jobs.add(id)
-        if should_start:
-            start_background(regenerate_article, id)
+        start_article_job(id)
 
     return templates.TemplateResponse(
         request, "chat.html", {"sessions": sessions, "session": session, "page": "chat"}
@@ -530,6 +560,30 @@ def get_sessions():
         return [s.to_dict() for s in list_sessions(db)]
 
 
+@app.get("/api/session/{id}/article")
+def get_article(id: str):
+    """Article generation status, polled by the article page while it is empty."""
+    with SessionLocal() as db:
+        session = db.get(VideoSession, id)
+    if not session:
+        return error_response("Session not found", 404)
+    return article_state(session)
+
+
+@app.post("/api/session/{id}/article")
+def retry_article(id: str):
+    """(Re)starts article generation for a session whose article is missing."""
+    with SessionLocal() as db:
+        session = db.get(VideoSession, id)
+    if not session:
+        return error_response("Session not found", 404)
+    if not session.transcript:
+        return error_response("This session has no transcript to build an article from.", 400)
+    if not (session.article_content or "").strip():
+        start_article_job(id, retry=True)
+    return article_state(session)
+
+
 @app.delete("/api/session/{id}")
 def delete_session(id: str):
     """Deletes session from DB + HydraDB if possible."""
@@ -549,8 +603,9 @@ def delete_session(id: str):
             db.rollback()
             return error_response(f"Failed to delete session: {e}", 500)
 
-    # Clean up queue if it exists in status_queues
+    # Clean up in-memory state for the session
     status_queues.pop(id, None)
+    _article_errors.pop(id, None)
     return {"success": True}
 
 
