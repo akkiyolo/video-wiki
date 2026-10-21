@@ -7,4 +7,4 @@ python-dotenv==1.2.2
 requests==2.34.2
 youtube-transcript-api==1.2.4
 faster-whisper==1.2.1
-mistralai==2.4.5
+mistralai==2.10.1
