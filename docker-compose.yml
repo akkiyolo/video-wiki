@@ -1,0 +1,19 @@
+services:
+  videomind:
+    build: .
+    image: videomind:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: videomind/.env
+        required: false
+    environment:
+      # Container paths override any local values from videomind/.env
+      DATA_DIR: /data
+      DATABASE_URL: sqlite:////data/videomind.db
+    volumes:
+      - videomind-data:/data
+    restart: unless-stopped
+
+volumes:
+  videomind-data:

@@ -85,7 +85,8 @@
 
       <!-- Center Column: Editorial Wikipedia Canvas -->
       <article class="wiki-article-canvas" id="wikiArticleCanvas">
-        
+        <div class="wiki-article-inner">
+
         <!-- Floated Wikipedia InfoBox inside canvas for exact text wrapping -->
         <aside class="wiki-infobox-floated">
           <div class="infobox-header">
@@ -146,6 +147,7 @@
         
         <div id="wikiArticleHtml"></div>
         <textarea id="rawArticleMarkdown" style="display: none;">{{ session.article_content or "" }}</textarea>
+        </div>
       </article>
 
       <!-- Right Column: Interactive AI Copilot Research Assistant Panel -->
@@ -170,7 +172,7 @@
           <!-- Messages List Area -->
           <div class="chat-messages-container" id="chatMessages">
             <!-- Initial Greeting Message -->
-            {{ render_message('assistant', 'Hello! Welcome to the interactive AI Assistant. I have indexed the entire semantic structure of this video Wikipedia article in my HydraDB memory layers. Ask me any clarifying questions, or let\'s search inside the facts!') }}
+            {{ render_message('assistant', 'Ask me anything about this video. I answer from its transcript and point you to the moments that matter.') }}
             
             <!-- Dynamically added messages will go here -->
             

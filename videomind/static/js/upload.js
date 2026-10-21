@@ -26,6 +26,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const stepReady = document.getElementById('step-ready');
   const descReady = document.getElementById('desc-ready');
 
+  const MEDIA_EXTENSIONS = /\.(mp4|m4v|mov|mkv|webm|avi|wmv|flv|mpeg|mpg|mp3|wav|m4a|aac|ogg|oga|opus|flac|wma)$/i;
+
+  // Parses a JSON API response, tolerating non-JSON error bodies (e.g. 413 from a proxy)
+  async function readJSON(response) {
+    try {
+      return await response.json();
+    } catch (_) {
+      return { error: response.status === 413 ? 'File is too large for the server.' : `Server error (${response.status})` };
+    }
+  }
+
   // ==========================================
   // DRAG & DROP EVENT LISTENERS
   // ==========================================
@@ -89,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({ url: url })
       })
       .then(async (response) => {
-        const data = await response.json();
+        const data = await readJSON(response);
         if (!response.ok) {
           throw new Error(data.error || 'Failed to submit YouTube URL');
         }
@@ -99,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .catch((error) => {
         btnYoutubeSubmit.disabled = false;
-        btnYoutubeSubmit.innerText = 'Transcribe';
+        btnYoutubeSubmit.innerText = 'Compile Video';
         alert(error.message);
       });
     });
@@ -114,8 +125,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Basic type validation
-    if (!file.type.startsWith('video/') && !file.type.startsWith('audio/')) {
+    // Basic type validation (browsers report an empty type for some formats, so fall back to the extension)
+    const isMediaType = file.type.startsWith('video/') || file.type.startsWith('audio/');
+    if (!isMediaType && !MEDIA_EXTENSIONS.test(file.name)) {
       alert('Unsupported file format. Please upload an audio or video file.');
       return;
     }
@@ -134,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
       body: formData
     })
     .then(async (response) => {
-      const data = await response.json();
+      const data = await readJSON(response);
       if (!response.ok) {
         throw new Error(data.error || 'Failed to upload file');
       }
@@ -217,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Redirect to chat screen after 800ms
         setTimeout(() => {
-          window.location.href = `/session/${data.session_id}`;
+          window.location.href = `/session/${encodeURIComponent(data.session_id)}`;
         }, 800);
       } 
       
@@ -284,11 +296,11 @@ document.addEventListener('DOMContentLoaded', () => {
           body: JSON.stringify({ query: query })
         });
 
+        const data = await readJSON(response);
         if (!response.ok) {
-          throw new Error('Failed to retrieve search results');
+          throw new Error(data.error || 'Failed to retrieve search results');
         }
 
-        const data = await response.json();
         resultsList.innerHTML = '';
 
         if (data.results && data.results.length > 0) {
@@ -298,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             let thumbnailHTML = '';
             if (res.thumbnail) {
-              thumbnailHTML = `<img src="${res.thumbnail}" alt="Thumbnail" class="result-card-thumbnail" />`;
+              thumbnailHTML = `<img src="${escapeHTML(res.thumbnail)}" alt="Thumbnail" class="result-card-thumbnail" />`;
             } else {
               thumbnailHTML = `
                 <div class="result-card-file-icon">
@@ -314,11 +326,11 @@ document.addEventListener('DOMContentLoaded', () => {
               ${thumbnailHTML}
               <div class="result-card-info">
                 <h4 class="result-card-title">
-                  <a href="/session/${res.session_id}">${escapeHTML(res.session_title)}</a>
+                  <a href="/session/${encodeURIComponent(res.session_id)}">${escapeHTML(res.session_title)}</a>
                 </h4>
                 <span class="result-card-badge">${escapeHTML(res.source_type)}</span>
                 <p class="result-card-snippet">${escapeHTML(res.snippet)}</p>
-                <a href="/session/${res.session_id}" class="result-card-read-link">Read full Wiki article →</a>
+                <a href="/session/${encodeURIComponent(res.session_id)}" class="result-card-read-link">Read full Wiki article →</a>
               </div>
             `;
             resultsList.appendChild(card);
@@ -337,7 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
         alert(err.message);
       } finally {
         btnGlobalSearch.disabled = false;
-        btnGlobalSearch.innerText = 'Search';
+        btnGlobalSearch.innerText = 'Search Portal';
       }
     });
 
@@ -361,7 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function escapeHTML(str) {
-    return str
+    return String(str ?? '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')

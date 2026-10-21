@@ -11,18 +11,18 @@ VideoWiki is a state-of-the-art, high-density video knowledge engine. It automat
 
 ```mermaid
 graph TD
-    User([User Browser]) -->|Upload Media / Submit URL| Flask[Flask Backend Core]
-    Flask -->|Run background thread| Worker[Background Worker Task]
+    User([User Browser]) -->|Upload Media / Submit URL| API[FastAPI Backend Core]
+    API -->|Run background thread| Worker[Background Worker Task]
     Worker -->|Extract YouTube captions| YT[youtube-transcript-api]
     Worker -->|Quantized CPU speech-to-text| Whisper[faster-whisper base]
     Worker -->|A. Sync local session tenant| HydraDB_Local[(HydraDB Session Tenant)]
     Worker -->|B. Sync shared global catalog tenant| HydraDB_Global[(HydraDB Global VideoWiki Tenant)]
     Worker -->|C. Synthesize editorial Markdown| Mistral[Mistral Small Engine]
-    User -->|Search Catalog| Flask
-    Flask -->|Semantic query matches| HydraDB_Global
-    User -->|Chat with Copilot| Flask
-    Flask -->|Recall local context| HydraDB_Local
-    Flask -->|Token-by-token SSE stream| User
+    User -->|Search Catalog| API
+    API -->|Semantic query matches| HydraDB_Global
+    User -->|Chat with Copilot| API
+    API -->|Recall local context| HydraDB_Local
+    API -->|Token-by-token SSE stream| User
 ```
 
 ---
@@ -30,33 +30,39 @@ graph TD
 ## ⚡ Setup & Ingestion Engine
 
 ### 1. Pre-requisites
-Ensure you have **Python 3.9+** and `pip` installed.
+Make sure you have **Python 3.10+** (3.11 recommended) and `pip` installed, or just **Docker**.
 
-### 2. Install Pin Dependencies
-Execute package installations inside your terminal:
+### 2. Environment Variables Config
+Copy `videomind/.env.example` to `videomind/.env` and fill in your keys:
+```ini
+MISTRAL_API_KEY=your_mistral_api_key
+HYDRADB_API_KEY=your_hydradb_api_key   # optional, enables semantic memory + global search
+DATABASE_URL=sqlite:///videomind.db    # relative SQLite paths live in videomind/instance/
+```
+
+### 3a. Run with Docker (recommended for deployment)
+From the repository root:
 ```bash
+docker compose up --build
+# or, without compose:
+docker build -t videomind .
+docker run -p 8000:8000 --env-file videomind/.env -v videomind-data:/data videomind
+```
+The image bakes in the `faster-whisper` "base" model (skip with `--build-arg PRELOAD_WHISPER=false`), stores the SQLite DB and temporary uploads in the `/data` volume, honours the `PORT` env var used by most PaaS hosts, and exposes a `/healthz` health check.
+
+### 3b. Run locally
+```bash
+cd videomind
 pip install -r requirements.txt
+uvicorn app:app --reload        # or: python app.py
 ```
 > [!NOTE]
 > When uploading your first local MP4, MP3, or WAV file, the system will trigger a one-time automated download of the standard local `faster-whisper` "base" model (~150MB).
 
-### 3. Key Credentials (`.env`)
-Fill in your details in `.env`:
-```ini
-MISTRAL_API_KEY=your_mistral_api_key
-HYDRADB_API_KEY=your_hydradb_api_key
-FLASK_SECRET_KEY=super_secret_videomind_key_1298471
-FLASK_ENV=development
-DATABASE_URL=sqlite:///videomind.db
-```
-*(A pre-configured `.env` is already present and set up in your workspace!)*
+Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)** in your browser. Interactive API docs are at `/docs`.
 
-### 4. Fire Up the Portal
-Run the Flask application server:
-```bash
-python app.py
-```
-Open **[http://127.0.0.1:5000](http://127.0.0.1:5000)** in your browser.
+> [!IMPORTANT]
+> Run a **single worker process** (the default above). Ingestion progress is tracked in process memory, so multiple workers would break the live progress stream.
 
 ---
 
@@ -78,7 +84,7 @@ VideoWiki uses a advanced dual-layered vector indexing architecture powered by *
 
 VideoWiki is built to guarantee a bulletproof user experience even during API outages or background task delays:
 
-*   **Failsafe On-The-Fly Article Compilation**: If a user clicks an older session where article synthesis wasn't fully completed, the backend instantly compiles a beautiful structured Wikipedia-style article in ~2 seconds using `mistral-small-latest` and caches it in the SQLite database before rendering. No empty states, ever!
+*   **Failsafe On-The-Fly Article Compilation**: If a user clicks an older session where article synthesis wasn't fully completed, the backend kicks off a background job that compiles the structured Wikipedia-style article with `mistral-small-latest` and caches it in the SQLite database, so the page never blocks on the LLM. Refresh to see it.
 *   **Offline Context Windowing**: If HydraDB becomes unreachable or rate-limited, the AI Research Assistant automatically falls back to an offline windowing algorithm. It extracts the densest section of the transcript, and feeds it directly into Mistral to maintain a high-quality conversation without interruption.
 
 ---

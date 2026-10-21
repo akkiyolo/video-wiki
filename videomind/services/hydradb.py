@@ -110,6 +110,39 @@ def store_memory(tenant_id: str, transcript: str, title: str) -> bool:
         print(f"HydraDB store_memory exception: {e}")
         return False
 
+def store_global_chunks(tenant_id: str, session_id: str, title: str, transcript: str, chunk_size: int = 250) -> bool:
+    """
+    Splits the transcript into ~chunk_size word chunks and stores each one in the shared
+    global tenant, tagged with the article title and session id so search results can
+    link back to the session.
+    Return True if every chunk was stored, False otherwise
+    """
+    if not Config.HYDRADB_API_KEY:
+        return False
+
+    url = f"{BASE_URL}/memories/add_memory"
+    words = (transcript or "").split()
+    all_ok = True
+
+    for i in range(0, len(words), chunk_size):
+        chunk_text = " ".join(words[i:i + chunk_size])
+        global_text = f"Article Title: {title} | Session ID: {session_id} | Content: {chunk_text}"
+        payload = {
+            "tenant_id": tenant_id,
+            "sub_tenant_id": "main",
+            "memories": [{"text": global_text, "infer": True}]
+        }
+        try:
+            response = requests.post(url, json=payload, headers=get_headers(), timeout=15)
+            if not response.ok:
+                all_ok = False
+                print(f"HydraDB global add_memory failed with status {response.status_code}: {response.text}")
+        except Exception as e:
+            all_ok = False
+            print(f"HydraDB store_global_chunks exception: {e}")
+
+    return all_ok
+
 def recall_context(tenant_id: str, query: str) -> str:
     """
     POST /recall/full_recall with {"tenant_id": tenant_id, "query": query, "sub_tenant_id": "main"}
@@ -197,8 +230,8 @@ def delete_tenant(tenant_id: str) -> bool:
             return True
         else:
             # Let's also try DELETE /tenants/delete?tenant_id={tenant_id} just in case
-            url_alt = f"{BASE_URL}/tenants/delete?tenant_id={tenant_id}"
-            response_alt = requests.delete(url_alt, headers=get_headers(), timeout=10)
+            url_alt = f"{BASE_URL}/tenants/delete"
+            response_alt = requests.delete(url_alt, params={"tenant_id": tenant_id}, headers=get_headers(), timeout=10)
             if response_alt.ok:
                 print(f"Successfully deleted tenant {tenant_id} from HydraDB (alternative method).")
                 return True

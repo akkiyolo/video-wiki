@@ -85,6 +85,12 @@ document.addEventListener('DOMContentLoaded', () => {
       btnFloatingCopilot.classList.remove('visible');
       setTimeout(scrollToBottom, 310); // Scroll after transit finishes
     });
+
+    // On small screens the copilot is a slide-over sheet, so start with it closed
+    if (window.matchMedia('(max-width: 860px)').matches) {
+      wikiCopilotSidebar.classList.add('collapsed');
+      btnFloatingCopilot.classList.add('visible');
+    }
   }
 
   // ==========================================
@@ -100,32 +106,103 @@ document.addEventListener('DOMContentLoaded', () => {
             <path d="M6 2v18"></path>
           </svg>
           <h4>No Wiki article generated yet</h4>
-          <p>Please wait for the background AI synthesis job to complete editing.</p>
+          <p>The AI synthesis job is still running. Refresh this page in a moment.</p>
         </div>
       `;
     }
 
-    // Clean syntax and convert headers
-    let html = md
-      .replace(/^#\s+(.*?)$/gm, '<h1>$1</h1>')
-      .replace(/^##\s+(.*?)$/gm, '<h2 id="$1">$1</h2>')
-      .replace(/^###\s+(.*?)$/gm, '<h3>$1</h3>');
+    return markdownToHTML(md, true);
+  }
 
-    // Convert bold and italics
-    html = html
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>');
+  // Inline markdown on already-escaped text: code, bold, italics, links
+  function renderInline(text) {
+    return text
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, '$1<em>$2</em>')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  }
 
-    // Convert lists
-    html = html.replace(/^-\s+(.*?)$/gm, '<li>$1</li>');
+  // Small block-level markdown renderer (headings, lists, quotes, rules, paragraphs).
+  // Input is escaped first: the content is LLM output and must never be injected as raw HTML.
+  function markdownToHTML(md, withAnchors) {
+    const lines = escapeHTML(md.replace(/\r\n?/g, '\n')).split('\n');
+    const out = [];
+    let para = [];
+    let list = null;
 
-    // Convert paragraphs
-    html = html.replace(/\n\n/g, '<p></p>');
+    const flushPara = () => {
+      if (para.length) {
+        out.push(`<p>${renderInline(para.join(' '))}</p>`);
+        para = [];
+      }
+    };
+    const flushList = () => {
+      if (list) {
+        const items = list.items.map(item => `<li>${renderInline(item)}</li>`).join('');
+        out.push(`<${list.type}>${items}</${list.type}>`);
+        list = null;
+      }
+    };
+    const flush = () => { flushPara(); flushList(); };
 
-    // Break remaining newlines
-    html = html.replace(/\n/g, '<br>');
+    for (const raw of lines) {
+      const line = raw.trimEnd();
+      let m;
 
-    return html;
+      if (!line.trim()) {
+        flush();
+      } else if ((m = line.match(/^(#{1,4})\s+(.*)$/))) {
+        flush();
+        const level = m[1].length;
+        const text = m[2].replace(/\s+#+$/, '');
+        // h2 ids are slugified to match TOC anchors
+        const id = withAnchors && level === 2 ? ` id="${slugify(text)}"` : '';
+        out.push(`<h${level}${id}>${renderInline(text)}</h${level}>`);
+      } else if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+        flush();
+        out.push('<hr>');
+      } else if ((m = line.match(/^&gt;\s?(.*)$/))) {
+        flush();
+        out.push(`<blockquote>${renderInline(m[1])}</blockquote>`);
+      } else if ((m = line.match(/^\s*[-*+]\s+(.*)$/)) || (m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+        flushPara();
+        const type = /^\s*\d/.test(line) ? 'ol' : 'ul';
+        if (list && list.type !== type) flushList();
+        if (!list) list = { type, items: [] };
+        list.items.push(m[1]);
+      } else if (list && /^\s+/.test(raw)) {
+        // Indented continuation of the previous list item
+        list.items[list.items.length - 1] += ' ' + line.trim();
+      } else {
+        flushList();
+        para.push(line.trim());
+      }
+    }
+    flush();
+    return out.join('\n');
+  }
+
+  // "Key Thematic Concepts" -> "Key-Thematic-Concepts" (input is already HTML-escaped)
+  function slugify(text) {
+    return text.replace(/<[^>]*>/g, '').replace(/\*/g, '').trim().replace(/\s+/g, '-');
+  }
+
+  // Rebuild the TOC from the headings actually present (the LLM may number or rename them)
+  function rebuildTOC(container) {
+    const tocList = document.querySelector('.toc-list');
+    const headings = container.querySelectorAll('h2[id]');
+    if (!tocList || headings.length === 0) return;
+
+    tocList.innerHTML = '';
+    headings.forEach((h, i) => {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = `#${encodeURIComponent(h.id)}`;
+      a.textContent = `${i + 1}. ${h.textContent}`;
+      li.appendChild(a);
+      tocList.appendChild(li);
+    });
   }
 
   // Compile raw article markdown to editorial HTML on startup
@@ -136,6 +213,14 @@ document.addEventListener('DOMContentLoaded', () => {
   if (rawArticleMarkdown && wikiArticleHtml) {
     const rawMD = rawArticleMarkdown.value;
     wikiArticleHtml.innerHTML = renderMarkdown(rawMD);
+    rebuildTOC(wikiArticleHtml);
+
+    // Let the article title span the full column above the floated infobox
+    const titleEl = wikiArticleHtml.firstElementChild;
+    const infobox = document.querySelector('.wiki-infobox-floated');
+    if (titleEl && titleEl.tagName === 'H1' && infobox) {
+      infobox.parentNode.insertBefore(titleEl, infobox);
+    }
     if (wikiLoading) {
       wikiLoading.style.display = 'none';
     }
@@ -219,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function escapeHTML(str) {
-    return str
+    return String(str ?? '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -267,15 +352,21 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to communicate with LLM server.');
+        let errMsg = 'Failed to communicate with LLM server.';
+        try {
+          const errData = await response.json();
+          if (errData && errData.error) errMsg = errData.error;
+        } catch (_) { /* non-JSON error body */ }
+        throw new Error(errMsg);
       }
 
       // Read SSE stream
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let streamDone = false;
 
-      while (true) {
+      while (!streamDone) {
         const { value, done } = await reader.read();
         if (done) break;
 
@@ -290,42 +381,40 @@ document.addEventListener('DOMContentLoaded', () => {
           if (!cleanLine.startsWith('data: ')) continue;
           
           const rawJSON = cleanLine.substring(6);
+          let parsed;
           try {
-            const parsed = JSON.parse(rawJSON);
-
-            if (parsed.error) {
-              throw new Error(parsed.error);
-            }
-
-            if (parsed.done) {
-              break;
-            }
-
-            if (parsed.chunk) {
-              // Hide typing indicator on first arriving chunk
-              if (typingIndicator.style.display !== 'none') {
-                typingIndicator.style.display = 'none';
-              }
-
-              // Initialize bubble on first token
-              if (!assistantMessageWrapper) {
-                assistantMessageWrapper = appendMessageDOM('assistant', '');
-              }
-
-              assistantText += parsed.chunk;
-              const contentEl = assistantMessageWrapper.querySelector('.chat-bubble-content');
-              
-              // Basic markdown formatting replacement for bold/newlines
-              let formattedText = escapeHTML(assistantText)
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                .replace(/\n/g, '<br>');
-              
-              contentEl.innerHTML = formattedText;
-              scrollToBottom();
-            }
+            parsed = JSON.parse(rawJSON);
           } catch (jsonErr) {
             console.error('Failed to parse SSE JSON:', jsonErr);
+            continue;
+          }
+
+          // Thrown outside the JSON try so the outer handler shows it to the user
+          if (parsed.error) {
+            throw new Error(parsed.error);
+          }
+
+          if (parsed.done) {
+            streamDone = true;
+            break;
+          }
+
+          if (parsed.chunk) {
+            // Hide typing indicator on first arriving chunk
+            if (typingIndicator.style.display !== 'none') {
+              typingIndicator.style.display = 'none';
+            }
+
+            // Initialize bubble on first token
+            if (!assistantMessageWrapper) {
+              assistantMessageWrapper = appendMessageDOM('assistant', '');
+            }
+
+            assistantText += parsed.chunk;
+            const contentEl = assistantMessageWrapper.querySelector('.chat-bubble-content');
+            
+            contentEl.innerHTML = markdownToHTML(assistantText, false);
+            scrollToBottom();
           }
         }
       }
